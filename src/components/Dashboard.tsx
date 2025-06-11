@@ -12,25 +12,41 @@ import { Loader2 } from "lucide-react";
 import { db } from "@/db";
 
 const Dashboard = () => {
+  const [currentlyDeletingFile, setCurrentlyDeletingFile] = useState<
+    string | null
+  >(null);
+  const [currentlyRenamingFile, setCurrentlyRenamingFile] = useState<
+    string | null
+  >(null);
+  const [renameInput, setRenameInput] = useState("");
+
+
   const utils = trpc.useUtils();
   const { data: files, isLoading } = trpc.getUserFiles.useQuery();
   const { mutate: deleteFile } = trpc.deleteFile.useMutation({
     onSuccess: () => {
       utils.getUserFiles.invalidate(); // ← Refetch files
     },
+    onMutate({ id }) {
+      setCurrentlyDeletingFile(id);
+    },
+    onSettled() {
+      setCurrentlyDeletingFile(null);
+    },
   });
-  const { mutate: renameFile, isPending: isRenaming } =
-    trpc.updateFileName.useMutation({
-      onSuccess: () => {
-        utils.getUserFiles.invalidate(); // ← Refetch files
-      },
-    });
-  const [newName, setNewName] = useState<string>("");
-  const [showRename, setShowRename] = useState(false); // to toggle
-
-  const renameHandler = () => {
-    setShowRename(!showRename);
-  };
+  const { mutate: renameFile } = trpc.updateFileName.useMutation({
+    onSuccess: () => {
+      utils.getUserFiles.invalidate(); // ← Refetch files
+    },
+    onMutate({ id }) {
+      setCurrentlyRenamingFile(id);
+    },
+    onSettled() {
+      setCurrentlyRenamingFile(null);
+      setRenameInput("");
+    },
+    
+  });
   return (
     <main className="mx-auto max-w-7xl md:p-10">
       <div className="mt-8 flex flex-col items-start justify-between gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-center sm:gap-0">
@@ -62,11 +78,7 @@ const Dashboard = () => {
                     <div className="flex-1 truncate">
                       <div className="flex items-center space-x-3">
                         <h3 className="truncate text-lg font-medium text-zinc-900">
-                          {isRenaming ? (
-                            <Skeleton width={100} height={20} />
-                          ) : (
-                            file.name
-                          )}
+                          {file.name}
                         </h3>
                       </div>
                     </div>
@@ -84,43 +96,60 @@ const Dashboard = () => {
                   </div>
 
                   <Button
-                    onClick={renameHandler}
-                    size="sm"
-                    className=" w-full bg-zinc-400 hover:bg-zinc-600"
-                    title="Rename"
-                  >
-                    {isRenaming ? (
-                      <Loader2
-                        size="sm"
-                        className="h-8 w-8 animate-spin text-zinc-800"
-                      /> 
-                    ) : (
-                      <Pen className="w-4 h-4 text-white" />
-                    )}
-                  </Button>
-                  {showRename && (
-                    <Rename
-                      value={newName}
-                      onChange={setNewName}
-                      onClose={() => setShowRename(false)}
-                      onSave={() => {
-                        // Save logic here
-                        renameFile({
-                          id: file.id,
-                          name: newName,
-                        });
-                        console.log("File renamed to:", newName);
-                        setShowRename(false);
-                        setNewName("");
-                      }}
-                    />
-                  )}
+  onClick={() => {
+    setCurrentlyRenamingFile(file.id);
+    setRenameInput(file.name); // set initial input value
+  }}
+  size="sm"
+  className="w-full bg-zinc-400 hover:bg-zinc-600"
+  title="Rename"
+>
+  {currentlyRenamingFile === file.id ? (
+    <Loader2 size="sm" className="h-8 w-8 animate-spin text-zinc-800" />
+  ) : (
+    <Pen className="w-4 h-4 text-white" />
+  )}
+</Button>
+
+{/* Show Rename Input if current file is being renamed */}
+{currentlyRenamingFile === file.id && (
+  <Rename
+    value={renameInput}
+    onChange={setRenameInput}
+    onClose={() => {
+      setCurrentlyRenamingFile(null);
+      setRenameInput("");
+    }}
+    onSave={() => {
+const trimmed = renameInput.trim();
+  if (trimmed === "") return;
+
+  if (trimmed !== file.name) {
+    renameFile({
+      id: file.id,
+      name: trimmed,
+    });
+  }
+      setCurrentlyRenamingFile(null);
+      setRenameInput("");
+    }}
+  />
+)}
+
+
                   <Button
                     onClick={() => deleteFile({ id: file.id })}
                     size="sm"
                     className="w-full bg-red-200 hover:bg-red-500  hover:cursor-pointer "
                   >
-                    <Trash className="w-4 h-4 text-red-600" />
+                    {currentlyDeletingFile == file.id ? (
+                      <Loader2
+                        size="sm"
+                        className="h-8 w-8 animate-spin text-zinc-800"
+                      />
+                    ) : (
+                      <Trash className="w-4 h-4 text-red-600" />
+                    )}
                   </Button>
                 </div>
               </li>
